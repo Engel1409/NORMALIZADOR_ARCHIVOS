@@ -7,9 +7,6 @@ from docx import Document
 
 st.title("Normalizador Word y Excel")
 
-# -------------------------
-# NORMALIZAR TEXTO
-# -------------------------
 def normalizar(texto):
     texto = str(texto).strip().lower()
     texto = unicodedata.normalize('NFKD', texto)
@@ -19,19 +16,14 @@ def normalizar(texto):
     texto = re.sub(r"_+", "_", texto)
     return texto.strip("_")
 
-# -------------------------
-# PROCESAR PÁRRAFO SIN ROMPER FORMATO
-# -------------------------
+# ✅ NUEVA FUNCIÓN SEGURA
 def procesar_parrafo(paragraph):
 
-    # unir texto completo del párrafo
     full_text = "".join(run.text for run in paragraph.runs)
 
-    # si no hay variables → salir
     if "{{" not in full_text:
         return
 
-    # buscar variables completas
     variables = re.findall(r"{{(.*?)}}", full_text)
 
     for var in variables:
@@ -41,22 +33,17 @@ def procesar_parrafo(paragraph):
             "{{" + nueva + "}}"
         )
 
-    # ✅ reescribir SOLO si hubo cambio
-    if paragraph.runs:
-        paragraph.runs[0].text = full_text
-        for run in paragraph.runs[1:]:
-            run.text = ""
+    index = 0
+    for run in paragraph.runs:
+        length = len(run.text)
+        run.text = full_text[index:index + length]
+        index += length
 
-# -------------------------
-# NORMALIZAR WORD COMPLETO
-# -------------------------
 def normalizar_word(doc):
 
-    # párrafos normales
     for para in doc.paragraphs:
         procesar_parrafo(para)
 
-    # tablas (CLAVE en tu plantilla)
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
@@ -69,49 +56,33 @@ def normalizar_word(doc):
 word_file = st.file_uploader("📄 Subir Plantilla Word", type=["docx"])
 excel_file = st.file_uploader("📊 Subir data Excel", type=["xlsx"])
 
-# -------------------------
-# PROCESAR
-# -------------------------
 if word_file and excel_file:
 
-    # ✅ PROCESAR WORD
     doc = Document(word_file)
     normalizar_word(doc)
 
     word_buffer = BytesIO()
     doc.save(word_buffer)
 
-    # ✅ LIMPIAR EXCEL
     df = pd.read_excel(excel_file, dtype=str)
-
-    # normalizar columnas
     df.columns = [normalizar(col) for col in df.columns]
-
-    # eliminar filas vacías
     df = df.dropna(how="all")
 
-    # 🔥 regla clave -> eliminar si nro vacío o 0
     if "nro" in df.columns:
         df["nro"] = df["nro"].fillna("").astype(str).str.strip()
         df = df[df["nro"] != ""]
         df = df[df["nro"] != "0"]
 
-    # convertir todo a texto
     df = df.fillna("").astype(str)
     df = df.apply(lambda col: col.str.strip())
 
-    # preview
     st.subheader("✅ Datos limpios")
     st.dataframe(df.head())
 
-    # exportar excel
     excel_buffer = BytesIO()
     with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False)
 
-    # -------------------------
-    # DESCARGAS
-    # -------------------------
     st.download_button(
         "📄 Descargar Word Normalizado",
         data=word_buffer.getvalue(),
