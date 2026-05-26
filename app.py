@@ -1,10 +1,9 @@
-
 import streamlit as st
 import pandas as pd
 import re
 import unicodedata
-from zipfile import ZipFile
 from io import BytesIO
+from docx import Document
 
 st.title("Normalizador Word y Excel")
 
@@ -32,31 +31,26 @@ excel_file = st.file_uploader("📊 Subir data Excel", type=["xlsx"])
 if word_file and excel_file:
 
     # =====================
-    # NORMALIZAR WORD ✅
+    # NORMALIZAR WORD ✅ (SOLUCIÓN REAL)
     # =====================
-    with ZipFile(word_file, "r") as zin:
+    doc = Document(word_file)
 
-        xml = zin.read("word/document.xml").decode("utf-8")
+    for para in doc.paragraphs:
 
-        # ✅ detectar variables correctamente (evita basura XML)
-        variables = set(re.findall(r"{{\s*([^{}]+?)\s*}}", xml))
+        # detectar variables correctamente
+        variables = re.findall(r"{{(.*?)}}", para.text)
 
         for var in variables:
             nueva = normalizar(var)
 
-            xml = xml.replace(
+            para.text = para.text.replace(
                 "{{" + var + "}}",
                 "{{" + nueva + "}}"
             )
 
-        word_buffer = BytesIO()
-
-        with ZipFile(word_buffer, "w") as zout:
-            for item in zin.infolist():
-                if item.filename != "word/document.xml":
-                    zout.writestr(item, zin.read(item.filename))
-                else:
-                    zout.writestr(item, xml.encode("utf-8"))
+    # ✅ GUARDAR WORD
+    word_buffer = BytesIO()
+    doc.save(word_buffer)
 
     # =====================
     # LIMPIAR EXCEL ✅
@@ -69,7 +63,7 @@ if word_file and excel_file:
     # eliminar filas vacías
     df = df.dropna(how="all")
 
-    # ✅ REGLA CLAVE: eliminar si nro vacío o 0
+    # ✅ regla clave: eliminar si nro vacío o 0
     if "nro" in df.columns:
         df["nro"] = df["nro"].fillna("").astype(str).str.strip()
         df = df[df["nro"] != ""]
@@ -81,11 +75,11 @@ if word_file and excel_file:
     # limpiar espacios
     df = df.apply(lambda col: col.str.strip())
 
-    # evitar valores tipo "nan"
+    # evitar valores raros
     df = df.replace(["nan", "None", "NaN"], "")
 
     # =====================
-    # PREVIEW ✅
+    # PREVIEW
     # =====================
     st.subheader("✅ Datos limpios")
     st.dataframe(df.head())
@@ -93,7 +87,7 @@ if word_file and excel_file:
     st.success(f"Filas finales: {len(df)}")
 
     # =====================
-    # EXPORTAR EXCEL ✅
+    # EXPORTAR EXCEL
     # =====================
     excel_buffer = BytesIO()
 
@@ -101,7 +95,7 @@ if word_file and excel_file:
         df.to_excel(writer, index=False)
 
     # =====================
-    # DESCARGAS ✅
+    # DESCARGAS
     # =====================
     st.download_button(
         "📄 Descargar Word Normalizado",
