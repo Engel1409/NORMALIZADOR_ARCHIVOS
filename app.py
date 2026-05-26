@@ -22,8 +22,8 @@ def normalizar(texto):
 # -------------------------
 # SUBIR ARCHIVOS
 # -------------------------
-word_file = st.file_uploader("Subir Plantilla Word", type=["docx"])
-excel_file = st.file_uploader("Subir data Excel", type=["xlsx"])
+word_file = st.file_uploader("📄 Subir Plantilla Word", type=["docx"])
+excel_file = st.file_uploader("📊 Subir data Excel", type=["xlsx"])
 
 # -------------------------
 # PROCESAR
@@ -36,7 +36,6 @@ if word_file and excel_file:
     with ZipFile(word_file, "r") as zin:
 
         xml = zin.read("word/document.xml").decode("utf-8")
-
         variables = re.findall(r"{{(.*?)}}", xml)
 
         for var in variables:
@@ -57,13 +56,13 @@ if word_file and excel_file:
     # =====================
     df = pd.read_excel(excel_file, dtype=str)
 
-    # Normalizar columnas
+    # normalizar nombres columnas
     df.columns = [normalizar(col) for col in df.columns]
 
-    # 🔥 eliminar filas vacías
+    # ✅ eliminar filas vacías
     df = df.dropna(how="all")
 
-    # 🔥 eliminar filas que contienen "total"
+    # ✅ eliminar filas con "total"
     df = df[
         ~df.apply(
             lambda row: row.astype(str).str.lower().str.contains("total").any(),
@@ -71,11 +70,46 @@ if word_file and excel_file:
         )
     ]
 
-    # 🔍 preview para validar
-    st.subheader("Vista previa (datos limpios)")
+    # ✅ eliminar filas numéricas (sumatorias)
+    df = df[
+        ~df.apply(
+            lambda row: all(
+                re.fullmatch(r"[\d\.,]+", str(val).strip())
+                for val in row if str(val).strip() != ""
+            ),
+            axis=1
+        )
+    ]
+
+    # ✅ eliminar filas con claves vacías o 0
+    if "poliza" in df.columns:
+        df = df[df["poliza"].str.strip() != ""]
+        df = df[df["poliza"] != "0"]
+
+    if "nro" in df.columns:
+        df = df[df["nro"].str.strip() != ""]
+        df = df[df["nro"] != "0"]
+
+    # ✅ 🔥 convertir TODO a texto (CLAVE)
+    df = df.fillna("").astype(str)
+
+    # ✅ limpiar espacios
+    df = df.apply(lambda col: col.str.strip())
+
+    # ✅ evitar valores "nan"
+    df = df.replace(["nan", "None", "NaN"], "")
+
+    # =====================
+    # PREVIEW
+    # =====================
+    st.subheader("✅ Vista previa limpia")
     st.dataframe(df.tail())
 
-    # guardar excel limpio
+    st.success(f"Filas finales: {len(df)}")
+
+    # =====================
+    # EXPORTAR EXCEL LIMPIO
+    # =====================
     excel_buffer = BytesIO()
 
     with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
@@ -84,18 +118,17 @@ if word_file and excel_file:
     # =====================
     # DESCARGAS
     # =====================
-    st.success(f"✅ Filas finales: {len(df)}")
-
     st.download_button(
-        "Descargar Word Normalizado",
+        "📄 Descargar Word Normalizado",
         data=word_buffer.getvalue(),
         file_name="word_normalizado.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
 
+  
     st.download_button(
-        "Descargar Excel Normalizado (sin fila TOTAL)",
+        "📊 Descargar Excel Limpio (texto)",
         data=excel_buffer.getvalue(),
-        file_name="excel_normalizado.xlsx",
+        file_name="excel_limpio.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
