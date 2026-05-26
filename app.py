@@ -7,37 +7,23 @@ from io import BytesIO
 
 st.title("Normalizador Word y Excel")
 
-
 # -------------------------
 # NORMALIZAR TEXTO
 # -------------------------
 def normalizar(texto):
-
     texto = str(texto).strip().lower()
-
     texto = unicodedata.normalize('NFKD', texto)
     texto = texto.encode('ascii', 'ignore').decode('utf-8')
-
     texto = re.sub(r"[ .\-\/]+", "_", texto)
     texto = re.sub(r"[^a-z0-9_]", "", texto)
     texto = re.sub(r"_+", "_", texto)
-
     return texto.strip("_")
-
 
 # -------------------------
 # SUBIR ARCHIVOS
 # -------------------------
-word_file = st.file_uploader(
-    "Subir Plantila Word",
-    type=["docx"]
-)
-
-excel_file = st.file_uploader(
-    "Subir data Excel ",
-    type=["xlsx"]
-)
-
+word_file = st.file_uploader("Subir Plantilla Word", type=["docx"])
+excel_file = st.file_uploader("Subir data Excel", type=["xlsx"])
 
 # -------------------------
 # PROCESAR
@@ -54,20 +40,13 @@ if word_file and excel_file:
         variables = re.findall(r"{{(.*?)}}", xml)
 
         for var in variables:
-
             nueva = normalizar(var)
-
-            xml = xml.replace(
-                "{{" + var + "}}",
-                "{{" + nueva + "}}"
-            )
+            xml = xml.replace("{{" + var + "}}", "{{" + nueva + "}}")
 
         word_buffer = BytesIO()
 
         with ZipFile(word_buffer, "w") as zout:
-
             for item in zin.infolist():
-
                 if item.filename != "word/document.xml":
                     zout.writestr(item, zin.read(item.filename))
                 else:
@@ -78,26 +57,35 @@ if word_file and excel_file:
     # =====================
     df = pd.read_excel(excel_file, dtype=str)
 
-    df.columns = [
-        normalizar(col)
-        for col in df.columns
+    # Normalizar columnas
+    df.columns = [normalizar(col) for col in df.columns]
+
+    # 🔥 eliminar filas vacías
+    df = df.dropna(how="all")
+
+    # 🔥 eliminar filas que contienen "total"
+    df = df[
+        ~df.apply(
+            lambda row: row.astype(str).str.lower().str.contains("total").any(),
+            axis=1
+        )
     ]
 
+    # 🔍 preview para validar
+    st.subheader("Vista previa (datos limpios)")
+    st.dataframe(df.tail())
+
+    # guardar excel limpio
     excel_buffer = BytesIO()
 
-    with pd.ExcelWriter(
-        excel_buffer,
-        engine="openpyxl"
-    ) as writer:
-
-        df.to_excel(
-            writer,
-            index=False
-        )
+    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
 
     # =====================
     # DESCARGAS
     # =====================
+    st.success(f"✅ Filas finales: {len(df)}")
+
     st.download_button(
         "Descargar Word Normalizado",
         data=word_buffer.getvalue(),
@@ -106,7 +94,7 @@ if word_file and excel_file:
     )
 
     st.download_button(
-        "Descargar Excel Normalizado",
+        "Descargar Excel Normalizado (sin fila TOTAL)",
         data=excel_buffer.getvalue(),
         file_name="excel_normalizado.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
