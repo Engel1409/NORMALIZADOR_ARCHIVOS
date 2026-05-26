@@ -20,34 +20,39 @@ def normalizar(texto):
     return texto.strip("_")
 
 # -------------------------
-# FUNCION NORMALIZAR WORD
+# NORMALIZAR WORD (SIN ROMPER FORMATO)
 # -------------------------
-def normalizar_word(doc):
+def procesar_parrafo(paragraph):
 
-    # 🔹 PARÁRAFOS
-    for para in doc.paragraphs:
-        variables = re.findall(r"{{(.*?)}}", para.text)
-        for var in variables:
+    for run in paragraph.runs:
+
+        texto = run.text
+
+        matches = re.findall(r"{{(.*?)}}", texto)
+
+        for var in matches:
             nueva = normalizar(var)
-            para.text = para.text.replace(
+
+            texto = texto.replace(
                 "{{" + var + "}}",
                 "{{" + nueva + "}}"
             )
 
-    # 🔥 TABLAS (AQUÍ ESTABA TU PROBLEMA)
+        run.text = texto
+
+
+def normalizar_word(doc):
+
+    # ✅ párrafos normales
+    for para in doc.paragraphs:
+        procesar_parrafo(para)
+
+    # ✅ tablas
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for para in cell.paragraphs:
-
-                    variables = re.findall(r"{{(.*?)}}", para.text)
-
-                    for var in variables:
-                        nueva = normalizar(var)
-                        para.text = para.text.replace(
-                            "{{" + var + "}}",
-                            "{{" + nueva + "}}"
-                        )
+                    procesar_parrafo(para)
 
 # -------------------------
 # SUBIR ARCHIVOS
@@ -62,8 +67,7 @@ if word_file and excel_file:
 
     # ✅ WORD
     doc = Document(word_file)
-
-    normalizar_word(doc)  # 🔥 CLAVE
+    normalizar_word(doc)
 
     word_buffer = BytesIO()
     doc.save(word_buffer)
@@ -75,6 +79,7 @@ if word_file and excel_file:
 
     df = df.dropna(how="all")
 
+    # regla nro
     if "nro" in df.columns:
         df["nro"] = df["nro"].fillna("").astype(str).str.strip()
         df = df[df["nro"] != ""]
@@ -90,7 +95,7 @@ if word_file and excel_file:
     with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False)
 
-    # DESCARGA
+    # DESCARGAS
     st.download_button(
         "📄 Descargar Word Normalizado",
         data=word_buffer.getvalue(),
