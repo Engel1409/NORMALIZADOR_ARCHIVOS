@@ -52,17 +52,25 @@ if word_file and excel_file:
                     zout.writestr(item, xml.encode("utf-8"))
 
     # =====================
-    # NORMALIZAR EXCEL
+    # LIMPIAR EXCEL
     # =====================
     df = pd.read_excel(excel_file, dtype=str)
 
-    # normalizar nombres columnas
+    # normalizar columnas
     df.columns = [normalizar(col) for col in df.columns]
 
-    # ✅ eliminar filas vacías
+    # eliminar filas totalmente vacías
     df = df.dropna(how="all")
 
-    # ✅ eliminar filas con "total"
+    # ✅ 🔥 REGLA PRINCIPAL:
+    # si nro está vacío o es 0 → eliminar fila
+    if "nro" in df.columns:
+        df["nro"] = df["nro"].fillna("").astype(str).str.strip()
+
+        df = df[df["nro"] != ""]
+        df = df[df["nro"] != "0"]
+
+    # ✅ eliminar filas tipo TOTAL
     df = df[
         ~df.apply(
             lambda row: row.astype(str).str.lower().str.contains("total").any(),
@@ -70,39 +78,19 @@ if word_file and excel_file:
         )
     ]
 
-    # ✅ eliminar filas numéricas (sumatorias)
-    df = df[
-        ~df.apply(
-            lambda row: all(
-                re.fullmatch(r"[\d\.,]+", str(val).strip())
-                for val in row if str(val).strip() != ""
-            ),
-            axis=1
-        )
-    ]
-
-    # ✅ eliminar filas con claves vacías o 0
-    if "poliza" in df.columns:
-        df = df[df["poliza"].str.strip() != ""]
-        df = df[df["poliza"] != "0"]
-
-    if "nro" in df.columns:
-        df = df[df["nro"].str.strip() != ""]
-        df = df[df["nro"] != "0"]
-
-    # ✅ 🔥 convertir TODO a texto (CLAVE)
+    # ✅ convertir TODO a texto
     df = df.fillna("").astype(str)
 
     # ✅ limpiar espacios
     df = df.apply(lambda col: col.str.strip())
 
-    # ✅ evitar valores "nan"
+    # ✅ eliminar valores problemáticos
     df = df.replace(["nan", "None", "NaN"], "")
 
     # =====================
     # PREVIEW
     # =====================
-    st.subheader("✅ Vista previa limpia")
+    st.subheader("✅ Datos limpios")
     st.dataframe(df.tail())
 
     st.success(f"Filas finales: {len(df)}")
@@ -125,9 +113,8 @@ if word_file and excel_file:
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
 
-  
     st.download_button(
-        "📊 Descargar Excel Limpio (texto)",
+        "📊 Descargar Excel Limpio",
         data=excel_buffer.getvalue(),
         file_name="excel_limpio.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
